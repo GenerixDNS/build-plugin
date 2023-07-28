@@ -1,5 +1,7 @@
 package org.joges;
 
+import com.google.common.collect.Lists;
+import dev.triumphteam.gui.builder.item.ItemBuilder;
 import dev.triumphteam.gui.components.ScrollType;
 import dev.triumphteam.gui.guis.Gui;
 import dev.triumphteam.gui.guis.ScrollingGui;
@@ -8,6 +10,11 @@ import lombok.SneakyThrows;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.apache.commons.lang3.ArrayUtils;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.Sound;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.joges.annotations.Structure;
 import org.joges.annotations.StructureComponent;
@@ -21,13 +28,15 @@ import java.util.*;
 @Getter
 public final class GlobalObjectsStorage implements Structure {
 
-    private final LinkedList<String> worlds;
+    private final LinkedList<WorldObject> worlds;
     private final LinkedHashMap<UUID, Boolean> settings;
 
     @StructureComponent(ignore = true)
     private final ScrollingGui worldInventory;
     @StructureComponent(ignore = true)
     private final File storageFile = new File(Plugin.getInstance().getDataFolder().getAbsolutePath() + "/build_storage.json");
+    @StructureComponent(ignore = true)
+    private final ArrayList<UUID> pending = new ArrayList<>();
 
     @SneakyThrows
     public GlobalObjectsStorage() {
@@ -51,6 +60,20 @@ public final class GlobalObjectsStorage implements Structure {
             this.worlds = storage.getWorlds();
             this.settings = storage.getSettings();
         }
+
+        this.getWorldInventory().setItem(40, ItemBuilder.skull()
+                .owner(Bukkit.getOfflinePlayer("MHF_ArrowUp"))
+                .name(Component.text("add one"))
+                .asGuiItem(event -> {
+                    final var player = (Player) event.getWhoClicked();
+                    player.closeInventory();
+                    player.playSound(player, Sound.ENTITY_PLAYER_LEVELUP, 20, 20);
+                    //noinspection deprecation
+                    player.sendTitle("", "§8» §7schreibe§8: §7{§6name§7} {§6normal§7/§6flat§7}", 50, 50, 50);
+                    this.getPending().add(event.getWhoClicked().getUniqueId());
+                })
+        );
+        this.getWorldInventory().setItem(Lists.newArrayList(44, 43, 42, 41, 39, 38, 37, 36), ItemBuilder.from(Material.LIGHT_GRAY_STAINED_GLASS_PANE).asGuiItem());
 
     }
 

@@ -2,7 +2,6 @@ package org.joges;
 
 import dev.triumphteam.gui.builder.item.ItemBuilder;
 import lombok.Getter;
-import lombok.SneakyThrows;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.apache.commons.lang3.ArrayUtils;
@@ -10,15 +9,19 @@ import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Base64;
+import java.util.LinkedList;
 import java.util.Objects;
 
 @Getter
@@ -43,6 +46,16 @@ public final class Plugin extends JavaPlugin {
 
         onConnectListener();
         onInteractListener();
+        onChatListener();
+
+        final var removed = new LinkedList<WorldObject>();
+        this.getGlobalObjectsStorage().getWorlds().forEach(item -> {
+            if (new File(item.name()).exists()) {
+                final var wc = new WorldCreator(item.name());
+                Bukkit.createWorld(wc);
+            } else removed.add(item);
+        });
+        removed.forEach(item -> this.globalObjectsStorage.getWorlds().remove(item));
 
     }
 
@@ -88,6 +101,62 @@ public final class Plugin extends JavaPlugin {
                         if (event.getItem().getItemMeta().getPersistentDataContainer().has(Objects.requireNonNull(NamespacedKey.fromString("compass")))) {
                             event.getPlayer().playSound(event.getPlayer(), Sound.BLOCK_CHEST_OPEN, 20, 20);
                             this.getGlobalObjectsStorage().getWorldInventory().open(event.getPlayer());
+                        }
+                    }
+                }
+            }
+        }, this);
+    }
+
+    /* Player chat Listener  */
+    @SuppressWarnings("deprecation")
+    public void onChatListener() {
+        Bukkit.getPluginManager().registerEvent(AsyncPlayerChatEvent.class, new Listener() {
+        }, EventPriority.HIGH, (listener, rawEvent) -> {
+            final var event = (AsyncPlayerChatEvent) rawEvent;
+            if (this.getGlobalObjectsStorage().getPending().contains(event.getPlayer().getUniqueId())) {
+                if (event.getMessage().split(" ").length == 2) {
+                    if (this.getGlobalObjectsStorage().contains(event.getPlayer().getUniqueId())) {
+                        final var name = event.getMessage().split(" ")[0];
+                        if (!this.getGlobalObjectsStorage().getWorlds().contains(WorldObject.get(name))) {
+                            final var file = new File(name);
+                            final var wc = new WorldCreator(name);
+                            if (file.exists()) {
+                                if (file.isDirectory()) {
+                                    Bukkit.getScheduler().runTask(this, () -> {
+                                        final var imported = Bukkit.createWorld(wc);
+                                        event.getPlayer().teleportAsync(Objects.requireNonNull(imported).getSpawnLocation());
+                                        this.getGlobalObjectsStorage().getWorlds().add(WorldObject.create(name, event.getPlayer(), WorldObject.WorldType.IMPORTED));
+                                    });
+                                }
+                            } else {
+                                Bukkit.getScheduler().runTask(this, () -> {
+                                    final var type = event.getMessage().split(" ")[0].equalsIgnoreCase("normal") ? WorldObject.WorldType.NORMAL : WorldObject.WorldType.FLAT;
+                                    if (type == WorldObject.WorldType.FLAT)
+                                        wc.type(WorldType.FLAT);
+                                    final var imported = Bukkit.createWorld(wc);
+                                    event.getPlayer().teleportAsync(Objects.requireNonNull(imported).getSpawnLocation());
+                                    this.getGlobalObjectsStorage().getWorlds().add(WorldObject.create(name, event.getPlayer(), type));
+                                });
+                            }
+                            this.getGlobalObjectsStorage().getPending().remove(event.getPlayer().getUniqueId());
+                            Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
+                                event.getPlayer().playSound(event.getPlayer(), Sound.ENTITY_ENDERMAN_TELEPORT, 20, 20);
+                                new BukkitRunnable() {
+                                    double angle = 0;
+                                    @Override
+                                    public void run() {
+                                        if (angle >= Math.PI * 2 * 1) {
+                                            cancel();
+                                            return;
+                                        }
+                                        particle(event.getPlayer(), 1.5, 10);
+                                        angle += Math.PI / 16;
+                                    }
+                                }.runTaskTimer(this, 0L, 1L);
+                            }, 15);
+                        } else {
+                            event.getPlayer().playSound(event.getPlayer(), Sound.BLOCK_LAVA_POP, 20, 20);
                         }
                     }
                 }
