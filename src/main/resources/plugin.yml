@@ -1,0 +1,5 @@
+name: build_plugin
+author: JogesAtze104er
+main: org.joges.Plugin
+version: 1.0
+api-version: 1.13
