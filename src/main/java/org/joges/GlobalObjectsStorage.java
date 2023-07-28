@@ -73,7 +73,7 @@ public final class GlobalObjectsStorage implements Structure {
                     this.getPending().add(event.getWhoClicked().getUniqueId());
                 })
         );
-        this.getWorldInventory().setItem(Lists.newArrayList(44, 43, 42, 41, 39, 38, 37, 36), ItemBuilder.from(Material.LIGHT_GRAY_STAINED_GLASS_PANE).asGuiItem());
+        this.getWorldInventory().setItem(Lists.newArrayList(44, 43, 42, 41, 39, 38, 37, 36), ItemBuilder.from(Material.GRAY_STAINED_GLASS_PANE).asGuiItem());
 
     }
 

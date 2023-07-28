@@ -1,6 +1,7 @@
 package org.joges;
 
 import dev.triumphteam.gui.builder.item.ItemBuilder;
+import dev.triumphteam.gui.guis.GuiItem;
 import lombok.Getter;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
@@ -15,11 +16,13 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.LinkedList;
 import java.util.Objects;
@@ -32,6 +35,7 @@ public final class Plugin extends JavaPlugin {
 
     private final StructureMapper<Byte[]> objectMapper = StructureMapper.createNewByteMapper();
     private GlobalObjectsStorage globalObjectsStorage;
+    private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     private final Component prefixComponent = Component.text("Build ▹", TextColor.color(Color.AQUA.asRGB()));
     private final ItemBuilder compass = ItemBuilder
@@ -49,10 +53,13 @@ public final class Plugin extends JavaPlugin {
         onChatListener();
 
         final var removed = new LinkedList<WorldObject>();
+        final int[] i = {0, 0};
         this.getGlobalObjectsStorage().getWorlds().forEach(item -> {
             if (new File(item.name()).exists()) {
                 final var wc = new WorldCreator(item.name());
                 Bukkit.createWorld(wc);
+                this.globalObjectsStorage.getWorldInventory().setItem(i[0], this.item(item));
+                i[0]++;
             } else removed.add(item);
         });
         removed.forEach(item -> this.globalObjectsStorage.getWorlds().remove(item));
@@ -126,17 +133,21 @@ public final class Plugin extends JavaPlugin {
                                     Bukkit.getScheduler().runTask(this, () -> {
                                         final var imported = Bukkit.createWorld(wc);
                                         event.getPlayer().teleportAsync(Objects.requireNonNull(imported).getSpawnLocation());
-                                        this.getGlobalObjectsStorage().getWorlds().add(WorldObject.create(name, event.getPlayer(), WorldObject.WorldType.IMPORTED));
+                                        final var obj = WorldObject.create(name, event.getPlayer(), WorldObject.WorldType.IMPORTED);
+                                        this.getGlobalObjectsStorage().getWorlds().add(obj);
+                                        this.getGlobalObjectsStorage().getWorldInventory().addItem(this.item(obj));
                                     });
                                 }
                             } else {
                                 Bukkit.getScheduler().runTask(this, () -> {
-                                    final var type = event.getMessage().split(" ")[0].equalsIgnoreCase("normal") ? WorldObject.WorldType.NORMAL : WorldObject.WorldType.FLAT;
+                                    final var type = event.getMessage().split(" ")[1].equalsIgnoreCase("normal") ? WorldObject.WorldType.NORMAL : WorldObject.WorldType.FLAT;
                                     if (type == WorldObject.WorldType.FLAT)
                                         wc.type(WorldType.FLAT);
                                     final var imported = Bukkit.createWorld(wc);
                                     event.getPlayer().teleportAsync(Objects.requireNonNull(imported).getSpawnLocation());
-                                    this.getGlobalObjectsStorage().getWorlds().add(WorldObject.create(name, event.getPlayer(), type));
+                                    final var obj = WorldObject.create(name, event.getPlayer(), type);
+                                    this.getGlobalObjectsStorage().getWorlds().add(obj);
+                                    this.getGlobalObjectsStorage().getWorldInventory().addItem(this.item(obj));
                                 });
                             }
                             this.getGlobalObjectsStorage().getPending().remove(event.getPlayer().getUniqueId());
@@ -164,7 +175,36 @@ public final class Plugin extends JavaPlugin {
         }, this);
     }
 
-    public void particle(Player player, double radius, int particleCount) {
+    public GuiItem item(@NotNull WorldObject worldObject) {
+        return ItemBuilder.from(Material.FILLED_MAP)
+                .name(Component.text("§8» §6" + worldObject.name()))
+                .lore(
+                        Component.text("§8§m--------------------"),
+                        Component.text("§7date§8: §7" + worldObject.created().format(this.formatter)),
+                        Component.text("§7creator§8: §7" + worldObject.creator()),
+                        Component.text("§7need perms§8: §7" + (worldObject.permission() ?  "§ayes" : "§7false")),
+                        Component.text("§7type§8: §7" + worldObject.worldType().name())
+                ).asGuiItem(event -> {
+                    event.getWhoClicked().teleportAsync(Objects.requireNonNull(Bukkit.getWorld(worldObject.name())).getSpawnLocation());
+                    Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> {
+                        ((Player) event.getWhoClicked()).playSound(event.getWhoClicked().getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 20, 20);
+                        new BukkitRunnable() {
+                            double angle = 0;
+                            @Override
+                            public void run() {
+                                if (angle >= Math.PI * 2 * 1) {
+                                    cancel();
+                                    return;
+                                }
+                                particle((Player) event.getWhoClicked(), 1.5, 10);
+                                angle += Math.PI / 16;
+                            }
+                        }.runTaskTimer(this, 0L, 1L);
+                    }, 15);
+                });
+    }
+
+    public void particle(@NotNull Player player, double radius, int particleCount) {
         Location playerLocation = player.getLocation().add(0, 0.5, 0);
         final var dustOptions = new Particle.DustOptions(Color.YELLOW, 1.0f);
         double centerX = playerLocation.getX();

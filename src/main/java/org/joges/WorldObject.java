@@ -2,9 +2,10 @@ package org.joges;
 
 import org.bukkit.entity.Player;
 
+import java.io.Serializable;
 import java.time.LocalDate;
 
-public record WorldObject(String name, String creator, LocalDate created, boolean permission, WorldType worldType) {
+public record WorldObject(String name, String creator, LocalDate created, boolean permission, WorldType worldType) implements Serializable {
 
     public static enum WorldType {
         NORMAL,
